@@ -1,0 +1,6 @@
+{
+  "databaseURL": "https://WhoamiI00-s-workspace-1erblk.us-east-1.xata.sh/db/snapcast",
+  "codegen": {
+    "output": "src/xata.ts"
+  }
+}
