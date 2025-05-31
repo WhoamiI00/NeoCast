@@ -16,7 +16,7 @@ const SignIn = () => {
             width={32}
             height={32}
           />
-          <h1>SnapCast</h1>
+          <h1>NeoCast</h1>
         </Link>
 
         <div className="description">
@@ -33,7 +33,7 @@ const SignIn = () => {
               ))} 
             </figure>
             <p>
-            SnapCast makes screen recording easy. From quick walkthroughs to
+            NeoCast makes screen recording easy. From quick walkthroughs to
               full presentations, it&apos;s fast, smooth, and shareable in seconds
             </p>
             <article>
@@ -45,13 +45,13 @@ const SignIn = () => {
                 className="rounded-full"
               />
               <div>
-                <h2>SnapCast</h2>
+                <h2>NeoCast</h2>
                 <p>Share It, In Seconds</p>
               </div>
             </article>
           </section>
         </div>
-        <p>© Snapcast 2025</p>
+        <p>© NeoCast 2025</p>
       </aside>
       <aside className="google-sign-in">
         <section>
@@ -62,10 +62,10 @@ const SignIn = () => {
               width={40}
               height={40}
             />
-            <h1>SnapCast</h1>
+            <h1>NeoCast</h1>
           </Link>
           <p>
-            Create and share your very first <span>SnapCast video</span> in no
+            Create and share your very first <span>NeoCast video</span> in no
             time!
           </p>
 

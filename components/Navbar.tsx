@@ -16,11 +16,11 @@ const Navbar = () => {
         <Link href="/">
           <Image
             src="/assets/icons/logo.svg"
-            alt="SnapChat Logo"
+            alt="NeoCast Logo"
             width={32}
             height={32}
           />
-          <h1>SnapCast</h1>
+          <h1>NeoCast</h1>
         </Link>
 
         {user && (
