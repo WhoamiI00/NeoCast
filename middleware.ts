@@ -1,3 +1,4 @@
+// Force rebuild - remove this comment later
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
