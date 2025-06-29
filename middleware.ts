@@ -1,29 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-// Import only what you need from Arcjet
-import aj from "./lib/arcjet";
 
 export default async function middleware(request: NextRequest) {
-  try {
-    // Handle Arcjet protection first
-    const decision = await aj
-      .withRule({
-        type: "shield",
-        mode: "LIVE",
-      })
-      .withRule({
-        type: "detectBot", 
-        mode: "LIVE",
-        allow: ["CATEGORY:SEARCH_ENGINE", "G00G1E_CRAWLER"],
-      })
-      .protect(request);
+  // Dynamic imports to reduce bundle size
+  const [
+    { auth },
+    { headers },
+    aj
+  ] = await Promise.all([
+    import("@/lib/auth"),
+    import("next/headers"), 
+    import("./lib/arcjet").then(m => m.default)
+  ]);
 
-    if (decision.isDenied()) {
-      return new NextResponse("Forbidden", { status: 403 });
-    }
-
-    // Handle auth
+  // Simple bot detection without heavy Arcjet rules
+  const userAgent = request.headers.get("user-agent") || "";
+  const isBot = /bot|crawler|spider/i.test(userAgent);
+  
+  if (!isBot) {
     const session = await auth.api.getSession({
       headers: await headers(),
     });
@@ -31,12 +24,9 @@ export default async function middleware(request: NextRequest) {
     if (!session) {
       return NextResponse.redirect(new URL("/sign-in", request.url));
     }
-
-    return NextResponse.next();
-  } catch (error) {
-    console.error("Middleware error:", error);
-    return NextResponse.next();
   }
+
+  return NextResponse.next();
 }
 
 export const config = {
