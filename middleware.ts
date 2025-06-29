@@ -1,27 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+// Import only what you need from Arcjet
 import aj from "./lib/arcjet";
 
 export default async function middleware(request: NextRequest) {
-  // Quick Arcjet check first (lighter weight)
-  const decision = await aj.protect(request);
-  
-  if (decision.isDenied()) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  try {
+    // Handle Arcjet protection first
+    const decision = await aj
+      .withRule({
+        type: "shield",
+        mode: "LIVE",
+      })
+      .withRule({
+        type: "detectBot", 
+        mode: "LIVE",
+        allow: ["CATEGORY:SEARCH_ENGINE", "G00G1E_CRAWLER"],
+      })
+      .protect(request);
+
+    if (decision.isDenied()) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    // Handle auth
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session) {
+      return NextResponse.redirect(new URL("/sign-in", request.url));
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error("Middleware error:", error);
+    return NextResponse.next();
   }
-
-  // Lazy load auth only when needed
-  const { auth } = await import("@/lib/auth");
-  const { headers } = await import("next/headers");
-  
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session) {
-    return NextResponse.redirect(new URL("/sign-in", request.url));
-  }
-
-  return NextResponse.next();
 }
 
 export const config = {
