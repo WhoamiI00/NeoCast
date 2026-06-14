@@ -1,74 +1,71 @@
 "use client";
 
-import { cn, createIframeLink } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
-import {
-  incrementVideoViews,
-  getVideoProcessingStatus,
-} from "@/lib/actions/video";
-import { initialVideoState } from "@/constants";
+import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { incrementVideoViews } from "@/lib/actions/video";
 
-const VideoPlayer = ({ videoId, className }: VideoPlayerProps) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [state, setState] = useState(initialVideoState);
+interface Props extends VideoPlayerProps {
+  transcript?: string;
+}
+
+const VideoPlayer = ({
+  videoId,
+  videoUrl,
+  thumbnailUrl,
+  transcript,
+  className,
+}: Props) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasIncremented, setHasIncremented] = useState(false);
+
+  const captionUrl = useMemo(() => {
+    if (!transcript || !transcript.trim().startsWith("WEBVTT")) return null;
+    const blob = new Blob([transcript], { type: "text/vtt" });
+    return URL.createObjectURL(blob);
+  }, [transcript]);
 
   useEffect(() => {
-    const checkProcessingStatus = async () => {
-      const status = await getVideoProcessingStatus(videoId);
-      setState((prev) => ({
-        ...prev,
-        isProcessing: !status.isProcessed,
-      }));
-
-      return status.isProcessed;
-    };
-
-    checkProcessingStatus();
-
-    const intervalId = setInterval(async () => {
-      const isProcessed = await checkProcessingStatus();
-      if (isProcessed) {
-        clearInterval(intervalId);
-      }
-    }, 3000);
     return () => {
-      clearInterval(intervalId);
+      if (captionUrl) URL.revokeObjectURL(captionUrl);
     };
+  }, [captionUrl]);
+
+  useEffect(() => {
+    setHasIncremented(false);
   }, [videoId]);
 
-  useEffect(() => {
-    if (state.isLoaded && !state.hasIncrementedView && !state.isProcessing) {
-      const incrementView = async () => {
-        try {
-          await incrementVideoViews(videoId);
-          setState((prev) => ({ ...prev, hasIncrementedView: true }));
-        } catch (error) {
-          console.error("Failed to increment view count:", error);
-        }
-      };
-
-      incrementView();
+  const handlePlay = async () => {
+    if (hasIncremented) return;
+    setHasIncremented(true);
+    try {
+      await incrementVideoViews(videoId);
+    } catch (error) {
+      console.error("Failed to increment view count:", error);
     }
-  }, [videoId, state.isLoaded, state.hasIncrementedView, state.isProcessing]);
+  };
 
   return (
     <div className={cn("video-player", className)}>
-      {state.isProcessing ? (
-        <div>
-          <p>Processing video...</p>
-        </div>
-      ) : (
-        <iframe
-          ref={iframeRef}
-          src={createIframeLink(videoId)}
-          loading="lazy"
-          title="Video player"
-          style={{ border: 0, zIndex: 50 }}
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-          onLoad={() => setState((prev) => ({ ...prev, isLoaded: true }))}
-        />
-      )}
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        poster={thumbnailUrl}
+        controls
+        preload="auto"
+        playsInline
+        onPlay={handlePlay}
+        className="w-full h-full rounded-lg"
+      >
+        {captionUrl && (
+          <track
+            kind="subtitles"
+            src={captionUrl}
+            srcLang="auto"
+            label="Auto-generated"
+            default
+          />
+        )}
+      </video>
     </div>
   );
 };

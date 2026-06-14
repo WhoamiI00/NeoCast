@@ -65,6 +65,7 @@ export const videos = pgTable("videos", {
   videoUrl: text("video_url").notNull(),
   videoId: text("video_id").notNull(),
   thumbnailUrl: text("thumbnail_url").notNull(),
+  transcript: text("transcript"),
   visibility: text("visibility").$type<"public" | "private">().notNull(),
   userId: text("user_id")
     .notNull()

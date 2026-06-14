@@ -7,9 +7,10 @@ import {
   createRecordingBlob,
   calculateRecordingDuration,
 } from "@/lib/utils";
+import { MAX_RECORDING_SECONDS } from "@/constants";
 
 export const useScreenRecording = () => {
-  const [state, setState] = useState<BunnyRecordingState>({
+  const [state, setState] = useState<ScreenRecordingState>({
     isRecording: false,
     recordedBlob: null,
     recordedVideoUrl: "",
@@ -21,6 +22,14 @@ export const useScreenRecording = () => {
   const chunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const startTimeRef = useRef<number | null>(null);
+  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearTicker = () => {
+    if (tickerRef.current) {
+      clearInterval(tickerRef.current);
+      tickerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -81,7 +90,16 @@ export const useScreenRecording = () => {
       chunksRef.current = [];
       startTimeRef.current = Date.now();
       mediaRecorderRef.current.start(1000);
-      setState((prev) => ({ ...prev, isRecording: true }));
+      setState((prev) => ({ ...prev, isRecording: true, recordingDuration: 0 }));
+
+      clearTicker();
+      tickerRef.current = setInterval(() => {
+        const elapsed = calculateRecordingDuration(startTimeRef.current);
+        setState((prev) => ({ ...prev, recordingDuration: elapsed }));
+        if (elapsed >= MAX_RECORDING_SECONDS) {
+          stopRecording();
+        }
+      }, 1000);
       return true;
     } catch (error) {
       console.error("Recording error:", error);
@@ -90,6 +108,7 @@ export const useScreenRecording = () => {
   };
 
   const stopRecording = () => {
+    clearTicker();
     cleanupRecording(
       mediaRecorderRef.current,
       streamRef.current,

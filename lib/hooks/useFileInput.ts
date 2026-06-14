@@ -45,5 +45,20 @@ export const useFileInput = (maxSize: number) => {
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  return { file, previewUrl, duration, inputRef, handleFileChange, resetFile };
+  const setExternalFile = (next: File) => {
+    if (next.size > maxSize) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setFile(next);
+    setPreviewUrl(URL.createObjectURL(next));
+  };
+
+  return {
+    file,
+    previewUrl,
+    duration,
+    inputRef,
+    handleFileChange,
+    resetFile,
+    setExternalFile,
+  };
 };

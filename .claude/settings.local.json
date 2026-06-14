@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx drizzle-kit *)",
+      "Bash(node scripts/check-db.mjs)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const u = process.env.DATABASE_URL; const m = u.match\\(/@\\([^/]+\\)\\\\//\\); console.log\\('host:', m ? m[1] : 'PARSE_FAIL'\\); console.log\\('has pooler:', u.includes\\('pooler'\\)\\);\")",
+      "Bash(ping -n 2 ep-autumn-mouse-ao0n8a4t-pooler.c-2.ap-southeast-1.aws.neon.tech)",
+      "Bash(nslookup neon.tech)",
+      "Bash(nslookup console.neon.tech)",
+      "Bash(ipconfig /flushdns)",
+      "Bash(nslookup ep-autumn-mouse-ao0n8a4t-pooler.c-2.ap-southeast-1.aws.neon.tech 1.1.1.1)",
+      "Bash(node -e \"require\\('dns'\\).setDefaultResultOrder\\('ipv4first'\\); require\\('dns'\\).setServers\\(['1.1.1.1','8.8.8.8']\\); require\\('dns'\\).lookup\\('ep-autumn-mouse-ao0n8a4t-pooler.c-2.ap-southeast-1.aws.neon.tech', \\(e,a\\)=>console.log\\(e||a\\)\\)\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const u = process.env.DATABASE_URL || ''; console.log\\('length:', u.length\\); console.log\\('starts with postgresql://:', u.startsWith\\('postgresql://'\\)\\); console.log\\('has @:', u.includes\\('@'\\)\\); console.log\\('first 30 chars:', JSON.stringify\\(u.slice\\(0, 30\\)\\)\\); console.log\\('last 30 chars:', JSON.stringify\\(u.slice\\(-30\\)\\)\\); console.log\\('has newline:', /[\\\\r\\\\n]/.test\\(u\\)\\);\")",
+      "Bash(node scripts/reset-db.mjs)",
+      "Bash(node -e \"import\\('@neondatabase/serverless'\\).then\\(m => { const s = m.neon\\('postgresql://x:x@x/x'\\); console.log\\(Object.keys\\(s\\)\\); console.log\\(typeof s\\); }\\)\")",
+      "Bash(timeout 8 powershell \"Start-Sleep -s 6; Get-Content 'C:\\\\Users\\\\ankit\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Coding-NeoCast\\\\2cab340c-db38-409d-91e8-0da97ce135e4\\\\tasks\\\\bm4bvsqbu.output' -Tail 30\")",
+      "Bash(timeout 4 powershell \"Get-Content 'C:\\\\Users\\\\ankit\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Coding-NeoCast\\\\2cab340c-db38-409d-91e8-0da97ce135e4\\\\tasks\\\\bm4bvsqbu.output' -Tail 60\")",
+      "PowerShell(Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object { $_.ServerAddresses.Count -gt 0 } | Select-Object InterfaceAlias,ServerAddresses | Format-Table -AutoSize)",
+      "PowerShell(try { Set-DnsClientServerAddress -InterfaceAlias \"Wi-Fi\" -ServerAddresses \\(\"1.1.1.1\",\"1.0.0.1\"\\) -ErrorAction Stop; Write-Output \"DNS updated on Wi-Fi\"; ipconfig /flushdns | Out-Null; Write-Output \"DNS cache flushed\" } catch { Write-Output \"FAILED - need admin: $\\($_.Exception.Message\\)\" })",
+      "Bash(node -e ' *)",
+      "Bash(node scripts/migrate-urls.mjs)"
+    ]
+  }
+}

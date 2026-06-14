@@ -7,21 +7,14 @@ import {
   saveVideoDetails,
 } from "@/lib/actions/video";
 import { useRouter } from "next/navigation";
-import { FileInput, FormField } from "@/components";
+import { FileInput, FormField, ThumbnailPicker } from "@/components";
 import { useFileInput } from "@/lib/hooks/useFileInput";
 import { MAX_THUMBNAIL_SIZE, MAX_VIDEO_SIZE } from "@/constants";
 
-const uploadFileToBunny = (
-  file: File,
-  uploadUrl: string,
-  accessKey: string
-): Promise<void> =>
+const uploadFileToR2 = (file: File, uploadUrl: string): Promise<void> =>
   fetch(uploadUrl, {
     method: "PUT",
-    headers: {
-      "Content-Type": file.type,
-      AccessKey: accessKey,
-    },
+    headers: { "Content-Type": file.type },
     body: file,
   }).then((response) => {
     if (!response.ok)
@@ -109,32 +102,28 @@ const UploadPage = () => {
       const {
         videoId,
         uploadUrl: videoUploadUrl,
-        accessKey: videoAccessKey,
-      } = await getVideoUploadUrl();
+        publicUrl: videoPublicUrl,
+      } = await getVideoUploadUrl(video.file.type);
 
-      if (!videoUploadUrl || !videoAccessKey)
-        throw new Error("Failed to get video upload credentials");
+      if (!videoUploadUrl || !videoPublicUrl)
+        throw new Error("Failed to get video upload URL");
 
-      await uploadFileToBunny(video.file, videoUploadUrl, videoAccessKey);
+      await uploadFileToR2(video.file, videoUploadUrl);
 
       const {
         uploadUrl: thumbnailUploadUrl,
-        cdnUrl: thumbnailCdnUrl,
-        accessKey: thumbnailAccessKey,
-      } = await getThumbnailUploadUrl(videoId);
+        publicUrl: thumbnailPublicUrl,
+      } = await getThumbnailUploadUrl(videoId, thumbnail.file.type);
 
-      if (!thumbnailUploadUrl || !thumbnailCdnUrl || !thumbnailAccessKey)
-        throw new Error("Failed to get thumbnail upload credentials");
+      if (!thumbnailUploadUrl || !thumbnailPublicUrl)
+        throw new Error("Failed to get thumbnail upload URL");
 
-      await uploadFileToBunny(
-        thumbnail.file,
-        thumbnailUploadUrl,
-        thumbnailAccessKey
-      );
+      await uploadFileToR2(thumbnail.file, thumbnailUploadUrl);
 
       await saveVideoDetails({
         videoId,
-        thumbnailUrl: thumbnailCdnUrl,
+        videoUrl: videoPublicUrl,
+        thumbnailUrl: thumbnailPublicUrl,
         ...formData,
         duration: videoDuration,
       });
@@ -184,17 +173,36 @@ const UploadPage = () => {
           type="video"
         />
 
-        <FileInput
-          id="thumbnail"
-          label="Thumbnail"
-          accept="image/*"
-          file={thumbnail.file}
-          previewUrl={thumbnail.previewUrl}
-          inputRef={thumbnail.inputRef}
-          onChange={thumbnail.handleFileChange}
-          onReset={thumbnail.resetFile}
-          type="image"
-        />
+        {video.previewUrl ? (
+          <ThumbnailPicker
+            videoUrl={video.previewUrl}
+            currentThumbnailUrl={thumbnail.previewUrl}
+            onPick={thumbnail.setExternalFile}
+          />
+        ) : (
+          <p className="text-sm text-gray-500">
+            Add a video first — you&apos;ll be able to pick a thumbnail frame here.
+          </p>
+        )}
+
+        <details className="text-sm">
+          <summary className="cursor-pointer text-gray-600 hover:text-gray-900">
+            Or upload a custom thumbnail image
+          </summary>
+          <div className="mt-3">
+            <FileInput
+              id="thumbnail"
+              label="Custom thumbnail"
+              accept="image/*"
+              file={thumbnail.file}
+              previewUrl={thumbnail.previewUrl}
+              inputRef={thumbnail.inputRef}
+              onChange={thumbnail.handleFileChange}
+              onReset={thumbnail.resetFile}
+              type="image"
+            />
+          </div>
+        </details>
 
         <FormField
           id="visibility"

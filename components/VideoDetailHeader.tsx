@@ -20,6 +20,7 @@ const VideoDetailHeader = ({
   thumbnailUrl,
 }: VideoDetailHeaderProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const [visibilityState, setVisibilityState] = useState<Visibility>(
     visibility as Visibility
@@ -39,6 +40,7 @@ const VideoDetailHeader = ({
       console.error("Error deleting video:", error);
     } finally {
       setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -118,7 +120,7 @@ const VideoDetailHeader = ({
           <div className="user-btn">
             <button
               className="delete-btn"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete video"}
@@ -139,6 +141,40 @@ const VideoDetailHeader = ({
           </div>
         )}
       </aside>
+
+      {showDeleteConfirm && (
+        <section className="dialog">
+          <div
+            className="overlay-record"
+            onClick={() => !isDeleting && setShowDeleteConfirm(false)}
+          />
+          <div className="dialog-content max-w-md">
+            <h3 className="text-lg font-semibold mb-2">Delete this video?</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              This will permanently remove the video and its thumbnail. This
+              can&apos;t be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
     </header>
   );
 };

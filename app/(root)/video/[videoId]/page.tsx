@@ -6,8 +6,9 @@ import { getTranscript, getVideoById } from "@/lib/actions/video";
 const page = async ({ params }: Params) => {
   const { videoId } = await params;
 
-  const { user, video } = await getVideoById(videoId);
-  if (!video) redirect("/404");
+  const record = await getVideoById(videoId);
+  if (!record || !record.video) redirect("/404");
+  const { user, video } = record;
 
   const transcript = await getTranscript(videoId);
 
@@ -26,7 +27,12 @@ const page = async ({ params }: Params) => {
 
       <section className="video-details">
         <div className="content">
-          <VideoPlayer videoId={video.videoId} />
+          <VideoPlayer
+            videoId={video.videoId}
+            videoUrl={video.videoUrl}
+            thumbnailUrl={video.thumbnailUrl}
+            transcript={transcript}
+          />
         </div>
 
         <VideoInfo

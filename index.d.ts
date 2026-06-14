@@ -94,6 +94,8 @@ declare interface VideoDetailHeaderProps {
 
 declare interface VideoPlayerProps {
   videoId: string;
+  videoUrl: string;
+  thumbnailUrl?: string;
   className?: string;
 }
 declare interface VideoInfoProps {
@@ -117,51 +119,26 @@ declare interface VideoDetails {
   videoId: string;
   title: string;
   description: string;
+  videoUrl: string;
   thumbnailUrl: string;
   tags: string | string[];
   visibility: Visibility;
   duration?: number | null;
 }
 
-declare interface BunnyVideoResponse {
-  guid: string;
-  status: number;
-  encodeProgress?: number;
-}
-
 declare type ApiResponse<T> =
   | ({ success: true; error: null } & T)
   | { success: false; error: string };
 
-declare interface ApiFetchOptions {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: object;
-  expectJson?: boolean;
-  bunnyType: "stream" | "storage";
-}
-
-declare interface BunnyStreamApiOptions {
-  method?: string;
-  body?: object;
-}
-
 declare interface VideoUploadUrlResponse {
   videoId: string;
   uploadUrl: string;
-  accessKey: string;
+  publicUrl: string;
 }
 
 declare interface ThumbnailUploadUrlResponse {
   uploadUrl: string;
-  cdnUrl: string;
-  accessKey: string;
-}
-
-declare interface VideoProcessingStatus {
-  isProcessed: boolean;
-  encodingProgress: number;
-  status: number;
+  publicUrl: string;
 }
 
 declare interface VideoWithUserResult {
@@ -260,7 +237,7 @@ declare interface MediaStreams {
   hasDisplayAudio: boolean;
 }
 
-declare interface BunnyRecordingState {
+declare interface ScreenRecordingState {
   isRecording: boolean;
   recordedBlob: Blob | null;
   recordedVideoUrl: string;

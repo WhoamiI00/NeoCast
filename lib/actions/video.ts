@@ -4,21 +4,21 @@ import { db } from "@/drizzle/db";
 import { videos, user } from "@/drizzle/schema";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import {apiFetch, doesTitleMatch, getEnv, getOrderByClause, withErrorHandling} from "@/lib/utils";
-import { BUNNY } from "@/constants";
+import { randomUUID } from "crypto";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { r2, R2_BUCKET, publicUrlFor } from "@/lib/r2";
+import { doesTitleMatch, getOrderByClause, withErrorHandling } from "@/lib/utils";
 import aj, { fixedWindow, request } from "../arcjet";
 
-// Constants with full names
-const VIDEO_STREAM_BASE_URL = BUNNY.STREAM_BASE_URL;
-const THUMBNAIL_STORAGE_BASE_URL = BUNNY.STORAGE_BASE_URL;
-const THUMBNAIL_CDN_URL = BUNNY.CDN_URL;
-const BUNNY_LIBRARY_ID = getEnv("BUNNY_LIBRARY_ID");
-const ACCESS_KEYS = {
-  streamAccessKey: getEnv("BUNNY_STREAM_ACCESS_KEY"),
-  storageAccessKey: getEnv("BUNNY_STORAGE_ACCESS_KEY"),
-};
+const UPLOAD_URL_TTL_SECONDS = 60 * 10;
 
 const validateWithArcjet = async (fingerPrint: string) => {
   const rateLimit = aj.withRule(
@@ -36,7 +36,6 @@ const validateWithArcjet = async (fingerPrint: string) => {
   }
 };
 
-// Helper functions with descriptive names
 const revalidatePaths = (paths: string[]) => {
   paths.forEach((path) => revalidatePath(path));
 };
@@ -56,69 +55,162 @@ const buildVideoWithUserQuery = () =>
     .from(videos)
     .leftJoin(user, eq(videos.userId, user.id));
 
-// Server Actions
-export const getVideoUploadUrl = withErrorHandling(async () => {
-  await getSessionUserId();
-  const videoResponse = await apiFetch<BunnyVideoResponse>(
-    `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos`,
-    {
-      method: "POST",
-      bunnyType: "stream",
-      body: { title: "Temp Title", collectionId: "" },
-    }
-  );
+const presignPut = async (key: string, contentType: string) => {
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+  return getSignedUrl(r2, command, { expiresIn: UPLOAD_URL_TTL_SECONDS });
+};
 
-  const uploadUrl = `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoResponse.guid}`;
-  return {
-    videoId: videoResponse.guid,
-    uploadUrl,
-    accessKey: ACCESS_KEYS.streamAccessKey,
-  };
-});
+export const getVideoUploadUrl = withErrorHandling(
+  async (contentType: string = "video/webm") => {
+    await getSessionUserId();
+    const videoId = randomUUID();
+    const key = `videos/${videoId}.webm`;
+    const uploadUrl = await presignPut(key, contentType);
+    return {
+      videoId,
+      uploadUrl,
+      publicUrl: publicUrlFor(key),
+    };
+  }
+);
 
 export const getThumbnailUploadUrl = withErrorHandling(
-  async (videoId: string) => {
-    const timestampedFileName = `${Date.now()}-${videoId}-thumbnail`;
-    const uploadUrl = `${THUMBNAIL_STORAGE_BASE_URL}/thumbnails/${timestampedFileName}`;
-    const cdnUrl = `${THUMBNAIL_CDN_URL}/thumbnails/${timestampedFileName}`;
-
+  async (videoId: string, contentType: string = "image/jpeg") => {
+    await getSessionUserId();
+    const ext = contentType.split("/")[1] ?? "jpg";
+    const key = `thumbnails/${videoId}.${ext}`;
+    const uploadUrl = await presignPut(key, contentType);
     return {
       uploadUrl,
-      cdnUrl,
-      accessKey: ACCESS_KEYS.storageAccessKey,
+      publicUrl: publicUrlFor(key),
     };
   }
 );
 
 export const saveVideoDetails = withErrorHandling(
-  async (videoDetails: VideoDetails) => {
+  async (videoDetails: VideoDetails & { videoUrl: string }) => {
     const userId = await getSessionUserId();
     await validateWithArcjet(userId);
-    await apiFetch(
-      `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoDetails.videoId}`,
-      {
-        method: "POST",
-        bunnyType: "stream",
-        body: {
-          title: videoDetails.title,
-          description: videoDetails.description,
-        },
-      }
-    );
 
     const now = new Date();
     await db.insert(videos).values({
-      ...videoDetails,
-      videoUrl: `${BUNNY.EMBED_URL}/${BUNNY_LIBRARY_ID}/${videoDetails.videoId}`,
+      videoId: videoDetails.videoId,
+      title: videoDetails.title,
+      description: videoDetails.description,
+      videoUrl: videoDetails.videoUrl,
+      thumbnailUrl: videoDetails.thumbnailUrl,
+      visibility: videoDetails.visibility,
+      duration: videoDetails.duration ?? null,
       userId,
       createdAt: now,
       updatedAt: now,
     });
 
     revalidatePaths(["/"]);
+
+    after(async () => {
+      try {
+        await runTranscription(videoDetails.videoId, videoDetails.videoUrl);
+      } catch (err) {
+        console.error("Background transcription failed:", err);
+      }
+    });
+
     return { videoId: videoDetails.videoId };
   }
 );
+
+function keyFromPublicUrl(publicUrl: string): string | null {
+  try {
+    const url = new URL(publicUrl);
+    return url.pathname.replace(/^\/+/, "");
+  } catch {
+    return null;
+  }
+}
+
+function formatVttTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds - Math.floor(seconds)) * 1000);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+}
+
+function toVtt(json: {
+  text: string;
+  segments?: Array<{ start: number; end: number; text: string }>;
+}): string {
+  if (!json.segments || json.segments.length === 0) {
+    return `WEBVTT\n\n00:00:00.000 --> 00:00:05.000\n${json.text.trim()}\n`;
+  }
+  const cues = json.segments
+    .map(
+      (seg) =>
+        `${formatVttTime(seg.start)} --> ${formatVttTime(seg.end)}\n${seg.text.trim()}`
+    )
+    .join("\n\n");
+  return `WEBVTT\n\n${cues}\n`;
+}
+
+async function runTranscription(videoId: string, videoUrl: string) {
+  console.log(`[transcribe] start videoId=${videoId}`);
+
+  const key = keyFromPublicUrl(videoUrl);
+  if (!key) throw new Error(`Could not parse R2 key from ${videoUrl}`);
+  console.log(`[transcribe] downloading from R2 key=${key}`);
+
+  const obj = await r2.send(
+    new GetObjectCommand({ Bucket: R2_BUCKET, Key: key })
+  );
+  const bytes = await obj.Body!.transformToByteArray();
+  const videoBlob = new Blob([bytes.buffer as ArrayBuffer], {
+    type: obj.ContentType || "video/webm",
+  });
+  console.log(
+    `[transcribe] downloaded ${videoBlob.size} bytes, type=${videoBlob.type}`
+  );
+
+  const form = new FormData();
+  form.append("file", videoBlob, `${videoId}.webm`);
+  form.append("model", "whisper-large-v3-turbo");
+  form.append("response_format", "verbose_json");
+
+  console.log(`[transcribe] calling Groq...`);
+  const groqResponse = await fetch(
+    "https://api.groq.com/openai/v1/audio/transcriptions",
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: form,
+    }
+  );
+  if (!groqResponse.ok) {
+    throw new Error(
+      `Groq error ${groqResponse.status}: ${await groqResponse.text()}`
+    );
+  }
+  const json = (await groqResponse.json()) as {
+    text: string;
+    segments?: Array<{ start: number; end: number; text: string }>;
+  };
+  console.log(
+    `[transcribe] Groq OK: text=${json.text.length} chars, segments=${json.segments?.length ?? 0}`
+  );
+  const vtt = toVtt(json);
+
+  await db
+    .update(videos)
+    .set({ transcript: vtt, updatedAt: new Date() })
+    .where(eq(videos.videoId, videoId));
+
+  console.log(`[transcribe] done videoId=${videoId}, vtt=${vtt.length} chars`);
+  revalidatePath(`/video/${videoId}`);
+}
 
 export const getAllVideos = withErrorHandling(async (
   searchQuery: string = '',
@@ -141,7 +233,6 @@ export const getAllVideos = withErrorHandling(async (
       )
       : canSeeTheVideos
 
-    // Count total for pagination
     const [{ totalCount }] = await db
       .select({ totalCount: sql<number>`count(*)` })
       .from(videos)
@@ -149,7 +240,6 @@ export const getAllVideos = withErrorHandling(async (
     const totalVideos = Number(totalCount || 0);
     const totalPages = Math.ceil(totalVideos / pageSize);
 
-    // Fetch paginated, sorted results
     const videoRecords = await buildVideoWithUserQuery()
       .where(whereCondition)
       .orderBy(
@@ -180,10 +270,22 @@ export const getVideoById = withErrorHandling(async (videoId: string) => {
 });
 
 export const getTranscript = withErrorHandling(async (videoId: string) => {
-  const response = await fetch(
-    `${BUNNY.TRANSCRIPT_URL}/${videoId}/captions/en-auto.vtt`
-  );
-  return response.text();
+  const [row] = await db
+    .select({ transcript: videos.transcript })
+    .from(videos)
+    .where(eq(videos.videoId, videoId));
+  return row?.transcript ?? "";
+});
+
+export const transcribeVideo = withErrorHandling(async (videoId: string) => {
+  await getSessionUserId();
+  const [row] = await db
+    .select({ videoUrl: videos.videoUrl })
+    .from(videos)
+    .where(eq(videos.videoId, videoId));
+  if (!row) throw new Error("Video not found");
+  await runTranscription(videoId, row.videoUrl);
+  return { ok: true };
 });
 
 export const incrementVideoViews = withErrorHandling(
@@ -250,33 +352,27 @@ export const updateVideoVisibility = withErrorHandling(
   }
 );
 
-export const getVideoProcessingStatus = withErrorHandling(
-  async (videoId: string) => {
-    const processingInfo = await apiFetch<BunnyVideoResponse>(
-      `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}`,
-      { bunnyType: "stream" }
-    );
-
-    return {
-      isProcessed: processingInfo.status === 4,
-      encodingProgress: processingInfo.encodeProgress || 0,
-      status: processingInfo.status,
-    };
-  }
-);
 
 export const deleteVideo = withErrorHandling(
   async (videoId: string, thumbnailUrl: string) => {
-    await apiFetch(
-      `${VIDEO_STREAM_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}`,
-      { method: "DELETE", bunnyType: "stream" }
-    );
+    const [row] = await db
+      .select({ videoUrl: videos.videoUrl })
+      .from(videos)
+      .where(eq(videos.videoId, videoId));
 
-    const thumbnailPath = thumbnailUrl.split("thumbnails/")[1];
-    await apiFetch(
-      `${THUMBNAIL_STORAGE_BASE_URL}/thumbnails/${thumbnailPath}`,
-      { method: "DELETE", bunnyType: "storage", expectJson: false }
-    );
+    const videoKey = row ? keyFromPublicUrl(row.videoUrl) : null;
+    const thumbnailKey = keyFromPublicUrl(thumbnailUrl);
+
+    if (videoKey) {
+      await r2.send(
+        new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: videoKey })
+      );
+    }
+    if (thumbnailKey) {
+      await r2.send(
+        new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: thumbnailKey })
+      );
+    }
 
     await db.delete(videos).where(eq(videos.videoId, videoId));
     revalidatePaths(["/", `/video/${videoId}`]);

@@ -12,7 +12,7 @@ import { NextRequest } from "next/server";
 const emailValidation = aj.withRule(
   validateEmail({
     mode: "LIVE",
-    block: ["DISPOSABLE", "INVALID", "NO_MX_RECORDS"],
+    deny: ["DISPOSABLE", "INVALID", "NO_MX_RECORDS"],
   })
 );
 
