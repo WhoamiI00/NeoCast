@@ -36,34 +36,46 @@ const ThumbnailPicker = ({
     if (videoRef.current) videoRef.current.currentTime = value;
   };
 
-  const capture = () => {
+  const waitForSeek = (v: HTMLVideoElement, target: number) =>
+    new Promise<void>((resolve) => {
+      if (Math.abs(v.currentTime - target) < 0.05 && v.readyState >= 2) {
+        resolve();
+        return;
+      }
+      const onSeeked = () => {
+        v.removeEventListener("seeked", onSeeked);
+        resolve();
+      };
+      v.addEventListener("seeked", onSeeked);
+      v.currentTime = target;
+    });
+
+  const capture = async () => {
     const v = videoRef.current;
     const c = canvasRef.current;
     if (!v || !c) return;
 
     setIsCapturing(true);
-    const w = v.videoWidth || 1280;
-    const h = v.videoHeight || 720;
-    c.width = w;
-    c.height = h;
-    const ctx = c.getContext("2d");
-    if (!ctx) {
+    try {
+      await waitForSeek(v, time);
+      const w = v.videoWidth || 1280;
+      const h = v.videoHeight || 720;
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(v, 0, 0, w, h);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        c.toBlob((b) => resolve(b), "image/jpeg", 0.85)
+      );
+      if (!blob) return;
+      const file = new File([blob], `thumbnail-${Date.now()}.jpg`, {
+        type: "image/jpeg",
+      });
+      onPick(file);
+    } finally {
       setIsCapturing(false);
-      return;
     }
-    ctx.drawImage(v, 0, 0, w, h);
-    c.toBlob(
-      (blob) => {
-        setIsCapturing(false);
-        if (!blob) return;
-        const file = new File([blob], `thumbnail-${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        });
-        onPick(file);
-      },
-      "image/jpeg",
-      0.85
-    );
   };
 
   const formatTime = (s: number) => {
@@ -82,9 +94,10 @@ const ThumbnailPicker = ({
           <video
             ref={videoRef}
             src={videoUrl}
-            preload="metadata"
+            preload="auto"
             muted
             playsInline
+            controls
             className="w-full rounded-lg bg-black aspect-video"
           />
           <input

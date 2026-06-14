@@ -19,20 +19,19 @@ export const useFileInput = (maxSize: number) => {
       const objectUrl = URL.createObjectURL(selectedFile);
       setPreviewUrl(objectUrl);
       
-      // Extract duration for video files
       if (selectedFile.type.startsWith('video/')) {
+        const probeUrl = URL.createObjectURL(selectedFile);
         const video = document.createElement('video');
         video.preload = 'metadata';
         video.onloadedmetadata = () => {
-          // Only set duration if it's a valid finite number
           if (isFinite(video.duration) && video.duration > 0) {
-            setDuration(Math.round(video.duration)); // Round to nearest integer
+            setDuration(Math.round(video.duration));
           } else {
-            setDuration(null); // Set to null if invalid
+            setDuration(null);
           }
-          URL.revokeObjectURL(video.src);
+          URL.revokeObjectURL(probeUrl);
         };
-        video.src = objectUrl;
+        video.src = probeUrl;
       }
     }
   };
