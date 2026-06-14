@@ -14,7 +14,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { r2, R2_BUCKET, publicUrlFor } from "@/lib/r2";
+import { r2, getR2Bucket, publicUrlFor } from "@/lib/r2";
 import { doesTitleMatch, getOrderByClause, withErrorHandling } from "@/lib/utils";
 import aj, { fixedWindow, request } from "../arcjet";
 
@@ -57,7 +57,7 @@ const buildVideoWithUserQuery = () =>
 
 const presignPut = async (key: string, contentType: string) => {
   const command = new PutObjectCommand({
-    Bucket: R2_BUCKET,
+    Bucket: getR2Bucket(),
     Key: key,
     ContentType: contentType,
   });
@@ -165,7 +165,7 @@ async function runTranscription(videoId: string, videoUrl: string) {
   console.log(`[transcribe] downloading from R2 key=${key}`);
 
   const obj = await r2.send(
-    new GetObjectCommand({ Bucket: R2_BUCKET, Key: key })
+    new GetObjectCommand({ Bucket: getR2Bucket(), Key: key })
   );
   const bytes = await obj.Body!.transformToByteArray();
   const videoBlob = new Blob([bytes.buffer as ArrayBuffer], {
@@ -365,12 +365,12 @@ export const deleteVideo = withErrorHandling(
 
     if (videoKey) {
       await r2.send(
-        new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: videoKey })
+        new DeleteObjectCommand({ Bucket: getR2Bucket(), Key: videoKey })
       );
     }
     if (thumbnailKey) {
       await r2.send(
-        new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: thumbnailKey })
+        new DeleteObjectCommand({ Bucket: getR2Bucket(), Key: thumbnailKey })
       );
     }
 
